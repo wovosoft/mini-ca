@@ -1,40 +1,55 @@
 <?php
-
-require __DIR__ . '/vendor/autoload.php';
-
+// Tinker away!
+use App\Models\Certificate;
+use App\Models\RootCa;
 use App\Services\PhpseclibX509Service;
 
-// Create an instance of the PhpseclibX509Service
-$service = new PhpseclibX509Service();
+\Illuminate\Support\Facades\Artisan::call("migrate:fresh", [
+    "--force" => true,
+    "--seed"  => true
+]);
 
-try {
-    echo "Generating Root CA...\n";
-
-    // Test generateRootCa with a passphrase
-    $rootCa = $service->generateRootCa(
-        'Test Root CA',
-        'example.com',
-        'test-passphrase'
+$keys = (new PhpseclibX509Service())
+    ->generateRootCa(
+        commonName      : "Root CA",
+        organizationName: "localhost",
+        passphrase      : "localhost"
     );
 
-    echo "Root CA generated successfully!\n";
+$rootCa = RootCa::query()->create([
+    'name'        => "Root CA",
+    'domain'      => "localhost",
+    'description' => "Root Certificate",
+    'private_key' => $keys["private_key"],
+    'public_key'  => $keys["public_key"],
+    'certificate' => $keys["certificate"],
+    'passphrase'  => "localhost"
+]);
 
-    echo "Generating Certificate...\n";
+file_put_contents(base_path("ssls/root-ca-certificate.pem"), $rootCa->certificate);
 
-    // Test generateCertificate with the generated root CA
-    $certificate = $service->generateCertificate(
-        'Test Certificate',
-        'example.com',
-        $rootCa['private_key'],
-        $rootCa['certificate'],
-        'test-passphrase',
-        'cert-passphrase'
+
+$cert = (new PhpseclibX509Service())
+    ->generateCertificate(
+        domain              : "localhost",
+        altNames            : ["localhost", "127.0.0.1"],
+        rootCaCertificatePem: $rootCa->certificate,
+        rootCaPrivateKeyPem : $rootCa->private_key,
+        rootCaPassphrase    : $rootCa->passphrase,      // rootCaPassphrase
+        days                : 365
     );
 
-    echo "Certificate generated successfully!\n";
-    echo "All tests passed successfully!\n";
-} catch (Exception $e) {
-    echo "Error: " . $e->getMessage() . "\n";
-    echo "File: " . $e->getFile() . "\n";
-    echo "Line: " . $e->getLine() . "\n";
-}
+$certificate = Certificate::query()->create([
+    "name"        => "Client Certificate Test",
+    "root_ca_id"  => $rootCa->getKey(),
+    "domain"      => "localhost",
+    'private_key' => $cert['private_key'],
+    'public_key'  => $cert['public_key'],
+    'certificate' => $cert['certificate'],
+    'valid_from'  => now(),
+    "expires_at"  => now()->addDays(365),
+]);
+
+
+file_put_contents(base_path("ssls/localhost_cert.pem"), $certificate->certificate);
+file_put_contents(base_path("ssls/localhost_key.pem"), $certificate->private_key);

@@ -2,21 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Models\Certificate;
 use App\Models\RootCa;
+use App\Services\PhpseclibX509Service;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Illuminate\Support\Str;
-use App\Services\OpenSslService;
+use Inertia\Inertia;
+use Random\RandomException;
 
 class CertificateController extends Controller
 {
-    private OpenSslService $openSslService;
+//    private OpenSslService $openSslService;
+    private PhpseclibX509Service $openSslService;
 
     public function __construct()
     {
-        $this->openSslService = new OpenSslService();
+        $this->openSslService = new PhpseclibX509Service();
     }
 
     /**
@@ -43,6 +44,7 @@ class CertificateController extends Controller
 
     /**
      * Store a newly created resource in storage.
+     * @throws RandomException
      */
     public function store(Request $request)
     {
@@ -59,21 +61,20 @@ class CertificateController extends Controller
             'expires_at' => 'nullable|date',
         ]);
 
-        $rootCa = RootCa::findOrFail($validated['root_ca_id']);
+        $rootCa = RootCa::query()->findOrFail($validated['root_ca_id']);
 
         $cert = $this
             ->openSslService
             ->generateCertificate(
-                $validated['name'],
-                $validated['domain'],
-                $rootCa->private_key,
-                $rootCa->certificate,
-                $rootCa->passphrase,      // rootCaPassphrase
-                $validated['passphrase'], // certificatePassphrase
-                $validated['expires_at'] ? now()->diffInDays($validated['expires_at']) : 365
+                domain              : $validated['name'],
+                altNames            : [$validated['domain']],
+                rootCaCertificatePem: $rootCa->certificate,
+                rootCaPrivateKeyPem : $rootCa->private_key,
+                rootCaPassphrase    : $rootCa->passphrase,      // rootCaPassphrase
+                days                : $validated['expires_at'] ? now()->diffInDays($validated['expires_at']) : 365
             );
 
-        Certificate::create(array_merge($validated, [
+        Certificate::query()->create(array_merge($validated, [
             'private_key' => $cert['private_key'],
             'public_key'  => $cert['public_key'],
             'certificate' => $cert['certificate'],

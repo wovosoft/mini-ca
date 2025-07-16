@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CertificateController;
+use App\Http\Controllers\DevCertificateController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -11,6 +12,9 @@ Route::get('/', function () {
 Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
+
+Route::get('/dev/certificate', [DevCertificateController::class, 'getCertificate']);
+Route::get('/dev/private-key', [DevCertificateController::class, 'getPrivateKey']);
 
 require __DIR__ . '/settings.php';
 require __DIR__ . '/auth.php';
